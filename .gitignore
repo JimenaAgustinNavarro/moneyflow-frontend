@@ -1,0 +1,36 @@
+# Dependencias
+node_modules/
+/.pnp
+.pnp.js
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+
+# Archivos de agente y memoria de contexto local
+MEMORY.md
+.agent/scratch/
+brain/
+
+# Compilación y producción
+.next/
+out/
+build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing y cobertura
+coverage/
+
+# Sistema y editores
+.DS_Store
+*.pem
+.vscode/
+.idea/
