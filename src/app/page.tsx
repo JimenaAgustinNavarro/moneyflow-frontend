@@ -1,6 +1,8 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/components/auth/auth-provider';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { getHealth, ApiError } from '@/lib/api-client';
@@ -9,6 +11,7 @@ import { GatewayHealthResponse } from '@/types/api';
 import { Activity, CheckCircle2, AlertTriangle, XCircle, RefreshCw, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 
 export default function HomePage(): React.JSX.Element {
+  const { status } = useAuth();
   const [health, setHealth] = React.useState<GatewayHealthResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
@@ -48,7 +51,33 @@ export default function HomePage(): React.JSX.Element {
             <p className="text-xs text-muted-foreground">Plataforma de Finanzas Personales</p>
           </div>
         </div>
-        <ThemeToggle />
+        <div className="flex flex-wrap items-center gap-3">
+          {status === 'authenticated' && (
+            <Link
+              href="/dashboard"
+              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Ir al dashboard
+            </Link>
+          )}
+          {status === 'unauthenticated' && (
+            <nav aria-label="Acceso de cuenta" className="flex items-center gap-2">
+              <Link
+                href="/login"
+                className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Iniciar sesión
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Registrarse
+              </Link>
+            </nav>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* Contenido Central */}
