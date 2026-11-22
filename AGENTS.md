@@ -41,3 +41,10 @@ npx vitest run --reporter=dot
 npm run lint
 npm run build
 ```
+
+## Invariantes de Diseño Frontend (Obligatorios en `/plan` y Fase 2)
+
+- **Consistencia de estado asíncrono (anti-race):** Todo estado global o efecto que realice `fetch` en montaje (`AuthProvider`, filtros, consultas) debe usar cancelación o contador monotónico (`useRef`) para descartar respuestas tardías obsoletas frente a acciones más recientes del usuario.
+- **Errores de red vs expiración de sesión:** Solo disparar limpieza de sesión ante `401`/`403` confirmados del backend (o fallo `401` del refresh), nunca ante errores transitorios de red.
+- **Sin flash de contenido protegido ni loops de redirección:** Las guardas de ruta (`ProtectedRoute` y `GuestOnlyRoute`) no deben renderizar `children` mientras el estado de sesión siga en `'loading'`, y las rutas públicas/privadas deben evitar redirecciones ciegas basadas en cookies que el Edge Middleware no puede verificar ni refrescar.
+- **Contrato literal del backend:** Antes de escribir tipos o mocks de tests en Frontend, contrastar siempre el archivo real de contrato en `moneyflow-backend/docs/contracts/` o `libs/shared/src/contracts/`.
