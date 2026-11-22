@@ -211,6 +211,37 @@ async function performRequest<T>(
   return (data ?? undefined) as T;
 }
 
+export function buildQueryString(
+  params?: Record<string, string | number | boolean | undefined>,
+): string {
+  if (!params) {
+    return '';
+  }
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+      searchParams.set(key, trimmed);
+      continue;
+    }
+    if (typeof value === 'boolean') {
+      searchParams.set(key, value ? 'true' : 'false');
+      continue;
+    }
+    searchParams.set(key, String(value));
+  }
+
+  const serialized = searchParams.toString();
+  return serialized.length > 0 ? `?${serialized}` : '';
+}
+
 export async function fetchFromApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   return performRequest<T>(endpoint, options, false);
 }

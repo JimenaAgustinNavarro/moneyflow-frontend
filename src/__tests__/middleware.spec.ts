@@ -6,6 +6,9 @@ describe('Next.js Middleware (src/middleware.ts)', () => {
   it('declara el matcher esperado para rutas protegidas y de autenticación', () => {
     expect(config.matcher).toEqual([
       '/dashboard/:path*',
+      '/funds/:path*',
+      '/transactions/:path*',
+      '/categories/:path*',
       '/login',
       '/register',
       '/verify-email',

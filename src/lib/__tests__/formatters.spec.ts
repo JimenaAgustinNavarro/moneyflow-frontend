@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { formatMoney, formatDate, formatDateTime } from '../formatters';
+import {
+  formatMoney,
+  formatDate,
+  formatDateTime,
+  getCurrentLimaMonthString,
+  getTodayLimaDateString,
+  isValidGregorianDateString,
+  shiftMonth,
+} from '../formatters';
 
 describe('formatters', () => {
   describe('formatMoney (100% basado en cadenas, cero punto flotante)', () => {
@@ -74,6 +82,38 @@ describe('formatters', () => {
 
     it('lanza error ante instante ISO inválido', () => {
       expect(() => formatDateTime('fecha-invalida')).toThrow('Instante de tiempo ISO inválido');
+    });
+  });
+
+  describe('formatMoney USD y utilidades America/Lima + shiftMonth', () => {
+    it('formatea USD manteniendo compatibilidad con PEN por defecto', () => {
+      expect(formatMoney('1250.50', 'USD')).toBe('$ 1,250.50');
+      expect(formatMoney('-45.00', 'USD')).toBe('-$ 45.00');
+      expect(formatMoney('-0.00', 'USD')).toBe('$ 0.00');
+    });
+
+    it('valida existencia gregoriana con isValidGregorianDateString', () => {
+      expect(isValidGregorianDateString('2026-11-22')).toBe(true);
+      expect(isValidGregorianDateString('2026-02-31')).toBe(false);
+      expect(isValidGregorianDateString('2026-02-29')).toBe(false);
+    });
+
+    it('respeta ventana nocturna 19:00-23:59 America/Lima sin desplazamiento UTC', () => {
+      // 2026-11-23T02:30:00.000Z = 2026-11-22 21:30:00 en America/Lima (UTC-5)
+      expect(getTodayLimaDateString(new Date('2026-11-23T02:30:00.000Z'))).toBe('2026-11-22');
+
+      // 2026-12-01T02:30:00.000Z = 2026-11-30 21:30:00 en America/Lima (UTC-5)
+      expect(getCurrentLimaMonthString(new Date('2026-12-01T02:30:00.000Z'))).toBe('2026-11');
+
+      // formatDate nunca desplaza una fecha calendario por huso horario local
+      expect(formatDate('2026-11-22')).toBe('22/11/2026');
+    });
+
+    it('desplaza meses con shiftMonth incluyendo cambio de año', () => {
+      expect(shiftMonth('2026-01', -1)).toBe('2025-12');
+      expect(shiftMonth('2026-12', 1)).toBe('2027-01');
+      expect(shiftMonth('2026-11', -11)).toBe('2025-12');
+      expect(() => shiftMonth('2026-13', 1)).toThrow('Mes calendario inválido');
     });
   });
 });

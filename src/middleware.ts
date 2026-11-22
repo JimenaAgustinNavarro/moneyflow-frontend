@@ -20,6 +20,9 @@ export function middleware(request: NextRequest): NextResponse {
 export const config = {
   matcher: [
     '/dashboard/:path*',
+    '/funds/:path*',
+    '/transactions/:path*',
+    '/categories/:path*',
     '/login',
     '/register',
     '/verify-email',
