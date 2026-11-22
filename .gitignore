@@ -36,3 +36,6 @@ coverage/
 .idea/
 
 *.tsbuildinfo
+
+# Reglas locales del agente
+.agent/rules/protocolo-auditoria.md
