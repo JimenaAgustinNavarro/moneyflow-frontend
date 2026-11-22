@@ -9,6 +9,7 @@ export interface GatewayHealthResponse {
 export interface ApiErrorResponse {
   statusCode: number;
   error: string;
+  code?: string;
   message: string | string[];
   timestamp: string;
   path: string;
