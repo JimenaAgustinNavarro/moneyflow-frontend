@@ -4,11 +4,22 @@ import {
   buildRecordAdjustmentPayload,
   buildRecordTransactionPayload,
   buildRecordTransferPayload,
+  buildRefundPayloadFingerprint,
+  buildRefundTransactionPayload,
+  buildTransactionsUrlSearchParams,
+  buildVoidPayloadFingerprint,
+  buildVoidTransactionPayload,
+  canRefundTransaction,
+  canVoidTransaction,
+  createRefundTransactionFormSchema,
+  createVoidTransactionFormSchema,
   isValidPositiveLedgerAmount,
   parseInitialLedgerMode,
+  parseTransactionsSearchParams,
   recordAdjustmentFormSchema,
   recordTransactionFormSchema,
   recordTransferFormSchema,
+  validateTransactionDateRange,
 } from '@/lib/ledger-schemas';
 
 describe('ledger-schemas', () => {
@@ -230,6 +241,154 @@ describe('ledger-schemas', () => {
       const fp3 = buildLedgerPayloadFingerprint('ADJUSTMENT', { ...payload, amount: '16.00' });
       expect(fp1).toBe(fp2);
       expect(fp1).not.toBe(fp3);
+    });
+  });
+
+  describe('MF-021: parseTransactionsSearchParams, validateTransactionDateRange y elegibilidad', () => {
+    it('sanitiza searchParams malformados en URL de forma segura', () => {
+      const params = new URLSearchParams(
+        'page=abc&limit=999&fundId=not-a-uuid&categoryId=123&type=INVALID&status=UNKNOWN&currency=EUR&search=' +
+          'x'.repeat(120),
+      );
+      const parsed = parseTransactionsSearchParams(params);
+
+      expect(parsed.filters.page).toBe(1);
+      expect(parsed.filters.limit).toBe(100);
+      expect(parsed.filters.fundId).toBeUndefined();
+      expect(parsed.filters.categoryId).toBeUndefined();
+      expect(parsed.filters.type).toBeUndefined();
+      expect(parsed.filters.status).toBeUndefined();
+      expect(parsed.filters.currency).toBeUndefined();
+      expect(parsed.filters.search).toHaveLength(100);
+      expect(parsed.dateError).toBeNull();
+    });
+
+    it('detecta fechas gregorianas inválidas y rangos fromDate > toDate', () => {
+      expect(validateTransactionDateRange('2026-02-31', '')).toMatch(/fecha calendario válida/i);
+      expect(validateTransactionDateRange('', '2026-02-29')).toMatch(/fecha calendario válida/i);
+      expect(validateTransactionDateRange('2026-11-25', '2026-11-20')).toMatch(
+        /no puede ser posterior/i,
+      );
+      expect(validateTransactionDateRange('2026-11-20', '2026-11-20')).toBeNull();
+
+      const parsedInverted = parseTransactionsSearchParams(
+        new URLSearchParams('fromDate=2026-11-25&toDate=2026-11-20'),
+      );
+      expect(parsedInverted.dateError).toMatch(/no puede ser posterior/i);
+      expect(parsedInverted.hasActiveFilters).toBe(true);
+
+      const serialized = buildTransactionsUrlSearchParams({
+        page: 1,
+        limit: 20,
+        type: 'EXPENSE',
+        currency: 'PEN',
+      });
+      expect(serialized.toString()).toBe('type=EXPENSE&currency=PEN');
+    });
+
+    it('aplica visibilidad estricta de canVoidTransaction y canRefundTransaction', () => {
+      expect(canVoidTransaction({ type: 'INCOME', status: 'POSTED' })).toBe(true);
+      expect(canVoidTransaction({ type: 'EXPENSE', status: 'POSTED' })).toBe(true);
+      expect(canVoidTransaction({ type: 'TRANSFER', status: 'POSTED' })).toBe(true);
+      expect(canVoidTransaction({ type: 'ADJUSTMENT', status: 'POSTED' })).toBe(true);
+      expect(canVoidTransaction({ type: 'VOID', status: 'POSTED' })).toBe(false);
+      expect(canVoidTransaction({ type: 'REFUND', status: 'POSTED' })).toBe(false);
+      expect(canVoidTransaction({ type: 'EXPENSE', status: 'VOIDED' })).toBe(false);
+
+      expect(canRefundTransaction({ type: 'EXPENSE', status: 'POSTED' })).toBe(true);
+      expect(canRefundTransaction({ type: 'EXPENSE', status: 'VOIDED' })).toBe(false);
+      expect(canRefundTransaction({ type: 'INCOME', status: 'POSTED' })).toBe(false);
+      expect(canRefundTransaction({ type: 'TRANSFER', status: 'POSTED' })).toBe(false);
+      expect(canRefundTransaction({ type: 'ADJUSTMENT', status: 'POSTED' })).toBe(false);
+      expect(canRefundTransaction({ type: 'VOID', status: 'POSTED' })).toBe(false);
+      expect(canRefundTransaction({ type: 'REFUND', status: 'POSTED' })).toBe(false);
+    });
+  });
+
+  describe('MF-021: voidTransactionFormSchema y refundTransactionFormSchema', () => {
+    it('valida fecha >= original.occurredOn en VOID y omite reason/notes vacíos en el payload', () => {
+      const schema = createVoidTransactionFormSchema('2026-11-20');
+
+      const invalidDate = schema.safeParse({
+        reason: '',
+        occurredOn: '2026-11-19',
+        notes: '',
+      });
+      expect(invalidDate.success).toBe(false);
+      if (!invalidDate.success) {
+        expect(invalidDate.error.issues[0].message).toMatch(/no puede ser anterior/i);
+      }
+
+      const valid = schema.safeParse({
+        reason: '   ',
+        occurredOn: '2026-11-20',
+        notes: '   ',
+      });
+      expect(valid.success).toBe(true);
+
+      const payload = buildVoidTransactionPayload({
+        reason: '   ',
+        occurredOn: '2026-11-20',
+        notes: '   ',
+      });
+      expect(payload).toEqual({ occurredOn: '2026-11-20' });
+      expect('reason' in payload).toBe(false);
+      expect('notes' in payload).toBe(false);
+
+      const fp1 = buildVoidPayloadFingerprint('tx-1', payload);
+      const fp2 = buildVoidPayloadFingerprint('tx-1', { ...payload });
+      expect(fp1).toBe(fp2);
+    });
+
+    it('valida monto <= original.amount y fecha >= original.occurredOn en REFUND', () => {
+      const schema = createRefundTransactionFormSchema('120.00', '2026-11-20');
+
+      const overAmount = schema.safeParse({
+        amount: '120.01',
+        occurredOn: '2026-11-21',
+        description: '',
+        notes: '',
+      });
+      expect(overAmount.success).toBe(false);
+      if (!overAmount.success) {
+        expect(overAmount.error.issues[0].message).toMatch(/no puede superar el monto/i);
+      }
+
+      const earlyDate = schema.safeParse({
+        amount: '50',
+        occurredOn: '2026-11-19',
+        description: '',
+        notes: '',
+      });
+      expect(earlyDate.success).toBe(false);
+      if (!earlyDate.success) {
+        expect(earlyDate.error.issues[0].message).toMatch(/no puede ser anterior/i);
+      }
+
+      const valid = schema.safeParse({
+        amount: '60.5',
+        occurredOn: '2026-11-20',
+        description: '  ',
+        notes: ' Devolución parcial ',
+      });
+      expect(valid.success).toBe(true);
+
+      const payload = buildRefundTransactionPayload({
+        amount: '60.5',
+        occurredOn: '2026-11-20',
+        description: '  ',
+        notes: ' Devolución parcial ',
+      });
+      expect(payload).toEqual({
+        amount: '60.50',
+        occurredOn: '2026-11-20',
+        notes: 'Devolución parcial',
+      });
+      expect('description' in payload).toBe(false);
+
+      const fp1 = buildRefundPayloadFingerprint('tx-1', payload);
+      const fp2 = buildRefundPayloadFingerprint('tx-1', { ...payload, amount: '61.00' });
+      expect(fp1).not.toBe(fp2);
     });
   });
 });
